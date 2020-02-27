@@ -281,6 +281,23 @@ func (p *PdfPage) println(text string) {
 	p.y += p.fontSize
 }
 
+func (p *PdfPage) drawImage(name string, x, y int) {
+	var i *PdfImage
+	for _, image := range p.document.resources.images {
+		if image.name == "/"+name {
+			i = image
+		}
+	}
+	w := i.width
+	h := i.height
+
+	p.content.graphics += fmt.Sprintf("q\r\n")
+	p.content.graphics += fmt.Sprintf("%v 0 0 %v %v %v cm\r\n", w, h, x, p.height-y)
+	p.content.graphics += fmt.Sprintf("%v Do\r\n", "/"+name)
+	p.content.graphics += fmt.Sprintf("Q\r\n")
+
+}
+
 func (p PdfPage) bytes() []byte {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%v 0 obj\r\n", p.id)
@@ -544,6 +561,8 @@ func main() {
 		document.currentPage.println(s)
 	}
 	document.currentPage.println("")
+
+	document.currentPage.drawImage("gopher", 0, 0)
 
 	fmt.Printf("%v\n", string(document.Bytes()))
 }
