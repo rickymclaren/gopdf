@@ -14,7 +14,15 @@ package main
 
 import (
 	"bytes"
+	"compress/flate"
+	"encoding/ascii85"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
+	"os"
 	"strings"
 )
 
@@ -40,6 +48,7 @@ const (
 // and easily write it out.
 type PdfObjectWriter interface {
 	setID(id int)
+	setDocument(*PdfDocument)
 	bytes() []byte
 }
 
@@ -52,6 +61,10 @@ type PdfObject struct {
 
 func (o *PdfObject) setID(id int) {
 	o.id = id
+}
+
+func (o *PdfObject) setDocument(d *PdfDocument) {
+	o.document = d
 }
 
 func (o PdfObject) objectRef() string {
@@ -98,6 +111,10 @@ func NewFont(name string, font int) PdfFont {
 		result = PdfFont{name: "/" + name, baseFont: "/Times-BoldItalic", subtype: "/Type1"}
 	case TimesItalic:
 		result = PdfFont{name: "/" + name, baseFont: "/Times-Italic", subtype: "/Type1"}
+	case Symbol:
+		result = PdfFont{name: "/" + name, baseFont: "/Symbol", subtype: "/Type1"}
+	case ZapfDingbats:
+		result = PdfFont{name: "/" + name, baseFont: "/ZapfDingbats", subtype: "/Type1"}
 	default:
 		panic("Invalid font " + string(font))
 	}
@@ -120,28 +137,67 @@ func (f PdfFont) bytes() []byte {
 // PdfImage represents an image resource
 type PdfImage struct {
 	PdfObject
-	name   string
-	width  int
-	height int
+	name        string
+	width       int
+	height      int
+	ascii85data []byte
 }
 
-func (i PdfImage) bytes() []byte {
+func (pi *PdfImage) loadImage(name string, filename string) {
+	f, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	image, _, err := image.Decode(f)
+	if err != nil {
+		panic(err)
+	}
+	bounds := image.Bounds()
+	pi.name = "/" + name
+	pi.width = bounds.Size().X
+	pi.height = bounds.Size().Y
+	rgbdata := []byte{}
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, _ := image.At(x, y).RGBA()
+			rgbdata = append(rgbdata, byte(r))
+			rgbdata = append(rgbdata, byte(g))
+			rgbdata = append(rgbdata, byte(b))
+		}
+	}
+	var compressed bytes.Buffer
+	w, err := flate.NewWriter(&compressed, flate.BestCompression)
+	if err != nil {
+		panic(err)
+	}
+	io.Copy(w, bytes.NewReader(rgbdata))
+	w.Close()
+	var ascii bytes.Buffer
+	encoder := ascii85.NewEncoder(&ascii)
+	io.Copy(encoder, bytes.NewReader(compressed.Bytes()))
+	encoder.Close()
+	pi.ascii85data = ascii.Bytes()
+
+}
+
+func (pi PdfImage) bytes() []byte {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%v 0 obj\r\n", i.id)
+	fmt.Fprintf(&buf, "%v 0 obj\r\n", pi.id)
 	fmt.Fprintf(&buf, "<<\r\n")
 	fmt.Fprintf(&buf, "/Type /XObject\r\n")
 	fmt.Fprintf(&buf, "/Subtype /Image\r\n")
-	fmt.Fprintf(&buf, "/Name %v\r\n", i.name)
-	fmt.Fprintf(&buf, "/Width %v\r\n", i.width)
-	fmt.Fprintf(&buf, "/Height %v\r\n", i.height)
+	fmt.Fprintf(&buf, "/Name %v\r\n", pi.name)
+	fmt.Fprintf(&buf, "/Width %v\r\n", pi.width)
+	fmt.Fprintf(&buf, "/Height %v\r\n", pi.height)
 	fmt.Fprintf(&buf, "/BitsPerComponent 8\r\n")
 	fmt.Fprintf(&buf, "/ColorSpace /DeviceRGB\r\n")
-	fmt.Fprintf(&buf, "/Filter [/FlateDecode]\r\n")
+	fmt.Fprintf(&buf, "/Filter [/ASCII85Decode /FlateDecode]\r\n")
 	fmt.Fprintf(&buf, "/Predictor 1\r\n")
-	fmt.Fprintf(&buf, "/Length 0\r\n")
+	fmt.Fprintf(&buf, "/Length %v\r\n", len(pi.ascii85data))
 	fmt.Fprintf(&buf, ">>\r\n")
 	fmt.Fprintf(&buf, "stream\r\n")
-	// TODO
+	fmt.Fprintf(&buf, "%s", string(pi.ascii85data))
 	fmt.Fprintf(&buf, "endstream\r\n")
 	fmt.Fprintf(&buf, "endobj\r\n")
 	return buf.Bytes()
@@ -172,24 +228,40 @@ type PdfPage struct {
 	PdfObject
 	parent                  *PdfPages
 	content                 *PdfPageContent
+	font                    *PdfFont
+	fontSize                int
 	height, width           int
 	x, y                    int
-	fontSize                int
 	leftMargin, rightMargin int
 	topMargin, bottomMargin int
 }
 
+func (p *PdfPage) setFont(name string) {
+	for _, f := range p.document.resources.fonts {
+		if f.name == "/"+name {
+			p.font = f
+		}
+	}
+	p.content.text += fmt.Sprintf("%v %v Tf\r\n", p.font.name, p.fontSize)
+}
+
+func (p *PdfPage) setFontSize(size int) {
+	p.fontSize = size
+	p.content.text += fmt.Sprintf("%v %v Tf\r\n", p.font.name, p.fontSize)
+}
+
 func (p *PdfPage) outputText(text string) {
 	var sb strings.Builder
-	for _, c := range text {
-		if c == '(' {
+	for i := range text {
+		b := text[i]
+		if b == '(' {
 			sb.WriteString(`\(`)
-		} else if c == ')' {
+		} else if b == ')' {
 			sb.WriteString(`\)`)
-		} else if c == '\\' {
+		} else if b == '\\' {
 			sb.WriteString(`\\`)
 		} else {
-			sb.WriteRune(c)
+			sb.WriteByte(b)
 		}
 	}
 	p.content.text += fmt.Sprintf("1 0 0 1 %v %v Tm\r\n",
@@ -335,6 +407,7 @@ type PdfDocument struct {
 
 func (d *PdfDocument) addObject(o PdfObjectWriter) {
 	o.setID(len(d.objects) + 1)
+	o.setDocument(d)
 	d.objects = append(d.objects, o)
 }
 
@@ -350,7 +423,6 @@ func NewPdfDocument() PdfDocument {
 	d.resources = new(PdfResources)
 	d.addObject(d.resources)
 	d.addPage()
-	d.addFont("F1", 1)
 	return d
 }
 
@@ -382,6 +454,14 @@ func (d *PdfDocument) addFont(name string, id int) PdfFont {
 	d.addObject(&font)
 	d.resources.fonts = append(d.resources.fonts, &font)
 	return font
+}
+
+func (d *PdfDocument) addImage(name string, filename string) {
+	i := PdfImage{name: name}
+	i.loadImage(name, filename)
+	d.addObject(&i)
+	d.resources.images = append(d.resources.images, &i)
+
 }
 
 // Bytes returns the byte representation of the PdfDocument
@@ -420,9 +500,50 @@ func (d PdfDocument) Bytes() []byte {
 
 // Test
 func main() {
+	var charset [256]byte
+	for i := range charset {
+		charset[i] = byte(i)
+	}
 	document := NewPdfDocument()
-	document.currentPage.println("Hello \\(World)")
-	document.currentPage.println("Goodbye World")
-	fmt.Printf("%v\n", string(document.Bytes()))
+	document.addFont("F1", Courier)
+	document.addFont("F2", TimesRoman)
+	document.addFont("F3", Symbol)
+	document.addFont("F4", ZapfDingbats)
+	document.addImage("gopher", "gopher.jpg")
 
+	document.currentPage.setFont("F1")
+	document.currentPage.println("Courier")
+	for i := 0; i < len(charset); i += 16 {
+		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
+		document.currentPage.println(s)
+	}
+	document.currentPage.println("")
+
+	document.currentPage.setFont("F2")
+	document.currentPage.println("Times Roman")
+	for i := 0; i < len(charset); i += 16 {
+		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
+		document.currentPage.println(s)
+	}
+	document.currentPage.println("")
+
+	document.currentPage.setFont("F1")
+	document.currentPage.println("Symbol")
+	document.currentPage.setFont("F3")
+	for i := 0; i < len(charset); i += 16 {
+		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
+		document.currentPage.println(s)
+	}
+	document.currentPage.println("")
+
+	document.currentPage.setFont("F1")
+	document.currentPage.println("Dingbats")
+	document.currentPage.setFont("F4")
+	for i := 0; i < len(charset); i += 16 {
+		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
+		document.currentPage.println(s)
+	}
+	document.currentPage.println("")
+
+	fmt.Printf("%v\n", string(document.Bytes()))
 }
