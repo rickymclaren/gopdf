@@ -14,7 +14,6 @@ package main
 
 import (
 	"bytes"
-	"compress/flate"
 	"encoding/ascii85"
 	"fmt"
 	"image"
@@ -157,25 +156,18 @@ func (pi *PdfImage) loadImage(name string, filename string) {
 	pi.name = "/" + name
 	pi.width = bounds.Size().X
 	pi.height = bounds.Size().Y
-	rgbdata := []byte{}
+	rgbdata := make([]byte, 0, pi.height*pi.width*3)
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			r, g, b, _ := image.At(x, y).RGBA()
-			rgbdata = append(rgbdata, byte(r))
-			rgbdata = append(rgbdata, byte(g))
-			rgbdata = append(rgbdata, byte(b))
+			rgbdata = append(rgbdata, byte(r>>8))
+			rgbdata = append(rgbdata, byte(g>>8))
+			rgbdata = append(rgbdata, byte(b>>8))
 		}
 	}
-	var compressed bytes.Buffer
-	w, err := flate.NewWriter(&compressed, flate.BestCompression)
-	if err != nil {
-		panic(err)
-	}
-	io.Copy(w, bytes.NewReader(rgbdata))
-	w.Close()
 	var ascii bytes.Buffer
 	encoder := ascii85.NewEncoder(&ascii)
-	io.Copy(encoder, bytes.NewReader(compressed.Bytes()))
+	io.Copy(encoder, bytes.NewReader(rgbdata))
 	encoder.Close()
 	pi.ascii85data = ascii.Bytes()
 
@@ -192,7 +184,7 @@ func (pi PdfImage) bytes() []byte {
 	fmt.Fprintf(&buf, "/Height %v\r\n", pi.height)
 	fmt.Fprintf(&buf, "/BitsPerComponent 8\r\n")
 	fmt.Fprintf(&buf, "/ColorSpace /DeviceRGB\r\n")
-	fmt.Fprintf(&buf, "/Filter [/ASCII85Decode /FlateDecode]\r\n")
+	fmt.Fprintf(&buf, "/Filter [ /ASCII85Decode ]\r\n")
 	fmt.Fprintf(&buf, "/Predictor 1\r\n")
 	fmt.Fprintf(&buf, "/Length %v\r\n", len(pi.ascii85data))
 	fmt.Fprintf(&buf, ">>\r\n")
@@ -526,7 +518,7 @@ func main() {
 	document.addFont("F2", TimesRoman)
 	document.addFont("F3", Symbol)
 	document.addFont("F4", ZapfDingbats)
-	document.addImage("gopher", "gopher.jpg")
+	document.addImage("I1", "gopher.jpg")
 
 	document.currentPage.setFont("F1")
 	document.currentPage.println("Courier")
@@ -562,7 +554,7 @@ func main() {
 	}
 	document.currentPage.println("")
 
-	document.currentPage.drawImage("gopher", 0, 0)
+	document.currentPage.drawImage("I1", 250, 300)
 
 	fmt.Printf("%v\n", string(document.Bytes()))
 }
