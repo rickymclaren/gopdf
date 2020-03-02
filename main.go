@@ -290,6 +290,18 @@ func (p *PdfPage) drawImage(name string, x, y int) {
 
 }
 
+func (p *PdfPage) drawBox(x, y, w, h int) {
+	p.content.lines += fmt.Sprintf("%v %v %v %v re\r\n", p.leftMargin+x, p.height-p.topMargin-y, w, -h)
+}
+
+func (p *PdfPage) drawLine(x1, y1, x2, y2 int) {
+	p.content.lines += fmt.Sprintf("%v %v m\r\n%v %v l\r\n", p.leftMargin+x1, p.height-p.topMargin-y1, p.leftMargin+x2, p.height-p.topMargin-y2)
+}
+
+func (p *PdfPage) setColour(red, green, blue int) {
+	p.content.text += fmt.Sprintf("%v %v %v rg\r\n", red, green, blue)
+}
+
 func (p PdfPage) bytes() []byte {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%v 0 obj\r\n", p.id)
@@ -555,6 +567,23 @@ func main() {
 	document.currentPage.println("")
 
 	document.currentPage.drawImage("I1", 250, 300)
+
+	document.currentPage.drawLine(200, 320, 500, 320)
+	document.currentPage.drawBox(200, 350, 300, 20)
+
+	document.currentPage.setFont("F1")
+	document.currentPage.setColour(255, 0, 0)
+	document.currentPage.x = 200
+	document.currentPage.y = 400
+	document.currentPage.print("red")
+	document.currentPage.setColour(0, 255, 0)
+	document.currentPage.x = 200
+	document.currentPage.y = 420
+	document.currentPage.print("green")
+	document.currentPage.setColour(0, 0, 255)
+	document.currentPage.x = 200
+	document.currentPage.y = 440
+	document.currentPage.print("blue")
 
 	fmt.Printf("%v\n", string(document.Bytes()))
 }
