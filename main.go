@@ -14,6 +14,7 @@ package main
 
 import (
 	"bytes"
+	"compress/zlib"
 	"encoding/ascii85"
 	"fmt"
 	"image"
@@ -165,9 +166,13 @@ func (pi *PdfImage) loadImage(name string, filename string) {
 			rgbdata = append(rgbdata, byte(b>>8))
 		}
 	}
+	var compressed bytes.Buffer
+	fw := zlib.NewWriter(&compressed)
+	fw.Write(rgbdata)
+	fw.Close()
 	var ascii bytes.Buffer
 	encoder := ascii85.NewEncoder(&ascii)
-	io.Copy(encoder, bytes.NewReader(rgbdata))
+	io.Copy(encoder, bytes.NewReader(compressed.Bytes()))
 	encoder.Close()
 	pi.ascii85data = ascii.Bytes()
 
@@ -184,7 +189,7 @@ func (pi PdfImage) bytes() []byte {
 	fmt.Fprintf(&buf, "/Height %v\r\n", pi.height)
 	fmt.Fprintf(&buf, "/BitsPerComponent 8\r\n")
 	fmt.Fprintf(&buf, "/ColorSpace /DeviceRGB\r\n")
-	fmt.Fprintf(&buf, "/Filter [ /ASCII85Decode ]\r\n")
+	fmt.Fprintf(&buf, "/Filter [ /ASCII85Decode /FlateDecode ]\r\n")
 	fmt.Fprintf(&buf, "/Predictor 1\r\n")
 	fmt.Fprintf(&buf, "/Length %v\r\n", len(pi.ascii85data))
 	fmt.Fprintf(&buf, ">>\r\n")
