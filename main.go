@@ -88,33 +88,33 @@ func NewFont(name string, font int) PdfFont {
 	var result PdfFont
 	switch font {
 	case Courier:
-		result = PdfFont{name: "/" + name, baseFont: "/Courier", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Courier", subtype: "Type1"}
 	case CourierBold:
-		result = PdfFont{name: "/" + name, baseFont: "/Courier-Bold", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Courier-Bold", subtype: "Type1"}
 	case CourierBoldOblique:
-		result = PdfFont{name: "/" + name, baseFont: "/Courier-BoldOblique", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Courier-BoldOblique", subtype: "Type1"}
 	case CourierOblique:
-		result = PdfFont{name: "/" + name, baseFont: "/Courier-Oblique", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Courier-Oblique", subtype: "Type1"}
 	case Helvetica:
-		result = PdfFont{name: "/" + name, baseFont: "/Helvetica", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica", subtype: "Type1"}
 	case HelveticaBold:
-		result = PdfFont{name: "/" + name, baseFont: "/Helvetica-Bold", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica-Bold", subtype: "Type1"}
 	case HelveticaBoldOblique:
-		result = PdfFont{name: "/" + name, baseFont: "/Helvetica-BoldOblique", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica-BoldOblique", subtype: "Type1"}
 	case HelveticaOblique:
-		result = PdfFont{name: "/" + name, baseFont: "/Helvetica-Oblique", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica-Oblique", subtype: "Type1"}
 	case TimesRoman:
-		result = PdfFont{name: "/" + name, baseFont: "/Times-Roman", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Times-Roman", subtype: "Type1"}
 	case TimesBold:
-		result = PdfFont{name: "/" + name, baseFont: "/Times-Bold", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Times-Bold", subtype: "Type1"}
 	case TimesBoldItalic:
-		result = PdfFont{name: "/" + name, baseFont: "/Times-BoldItalic", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Times-BoldItalic", subtype: "Type1"}
 	case TimesItalic:
-		result = PdfFont{name: "/" + name, baseFont: "/Times-Italic", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Times-Italic", subtype: "Type1"}
 	case Symbol:
-		result = PdfFont{name: "/" + name, baseFont: "/Symbol", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "Symbol", subtype: "Type1"}
 	case ZapfDingbats:
-		result = PdfFont{name: "/" + name, baseFont: "/ZapfDingbats", subtype: "/Type1"}
+		result = PdfFont{name: name, baseFont: "ZapfDingbats", subtype: "Type1"}
 	default:
 		panic("Invalid font " + string(font))
 	}
@@ -126,9 +126,9 @@ func (f PdfFont) bytes() []byte {
 	fmt.Fprintf(&buf, "%v 0 obj\r\n", f.id)
 	fmt.Fprintf(&buf, "<<\r\n")
 	fmt.Fprintf(&buf, "/Type /Font \r\n")
-	fmt.Fprintf(&buf, "/Subtype %v \r\n", f.subtype)
-	fmt.Fprintf(&buf, "/Name %v \r\n", f.name)
-	fmt.Fprintf(&buf, "/BaseFont %v \r\n", f.baseFont)
+	fmt.Fprintf(&buf, "/Subtype /%v \r\n", f.subtype)
+	fmt.Fprintf(&buf, "/Name /%v \r\n", f.name)
+	fmt.Fprintf(&buf, "/BaseFont /%v \r\n", f.baseFont)
 	fmt.Fprintf(&buf, ">>\r\n")
 	fmt.Fprintf(&buf, "endobj\r\n")
 	return buf.Bytes()
@@ -154,7 +154,7 @@ func (pi *PdfImage) loadImage(name string, filename string) {
 		panic(err)
 	}
 	bounds := image.Bounds()
-	pi.name = "/" + name
+	pi.name = name
 	pi.width = bounds.Size().X
 	pi.height = bounds.Size().Y
 	rgbdata := make([]byte, 0, pi.height*pi.width*3)
@@ -184,7 +184,7 @@ func (pi PdfImage) bytes() []byte {
 	fmt.Fprintf(&buf, "<<\r\n")
 	fmt.Fprintf(&buf, "/Type /XObject\r\n")
 	fmt.Fprintf(&buf, "/Subtype /Image\r\n")
-	fmt.Fprintf(&buf, "/Name %v\r\n", pi.name)
+	fmt.Fprintf(&buf, "/Name /%v\r\n", pi.name)
 	fmt.Fprintf(&buf, "/Width %v\r\n", pi.width)
 	fmt.Fprintf(&buf, "/Height %v\r\n", pi.height)
 	fmt.Fprintf(&buf, "/BitsPerComponent 8\r\n")
@@ -235,16 +235,16 @@ type PdfPage struct {
 
 func (p *PdfPage) setFont(name string) {
 	for _, f := range p.document.resources.fonts {
-		if f.name == "/"+name {
+		if f.name == name {
 			p.font = f
 		}
 	}
-	p.content.text += fmt.Sprintf("%v %v Tf\r\n", p.font.name, p.fontSize)
+	p.content.text += fmt.Sprintf("/%v %v Tf\r\n", p.font.name, p.fontSize)
 }
 
 func (p *PdfPage) setFontSize(size int) {
 	p.fontSize = size
-	p.content.text += fmt.Sprintf("%v %v Tf\r\n", p.font.name, p.fontSize)
+	p.content.text += fmt.Sprintf("/%v %v Tf\r\n", p.font.name, p.fontSize)
 }
 
 func (p *PdfPage) outputText(text string) {
@@ -281,7 +281,7 @@ func (p *PdfPage) println(text string) {
 func (p *PdfPage) drawImage(name string, x, y int) {
 	var i *PdfImage
 	for _, image := range p.document.resources.images {
-		if image.name == "/"+name {
+		if image.name == name {
 			i = image
 		}
 	}
@@ -290,17 +290,25 @@ func (p *PdfPage) drawImage(name string, x, y int) {
 
 	p.content.graphics += fmt.Sprintf("q\r\n")
 	p.content.graphics += fmt.Sprintf("%v 0 0 %v %v %v cm\r\n", w, h, x, p.height-y)
-	p.content.graphics += fmt.Sprintf("%v Do\r\n", "/"+name)
+	p.content.graphics += fmt.Sprintf("/%v Do\r\n", name)
 	p.content.graphics += fmt.Sprintf("Q\r\n")
 
 }
 
 func (p *PdfPage) drawBox(x, y, w, h int) {
-	p.content.lines += fmt.Sprintf("%v %v %v %v re\r\n", p.leftMargin+x, p.height-p.topMargin-y, w, -h)
+	p.content.lines += fmt.Sprintf("%v %v %v %v re\r\n",
+		p.leftMargin+x,
+		p.height-p.topMargin-y,
+		w,
+		-h)
 }
 
 func (p *PdfPage) drawLine(x1, y1, x2, y2 int) {
-	p.content.lines += fmt.Sprintf("%v %v m\r\n%v %v l\r\n", p.leftMargin+x1, p.height-p.topMargin-y1, p.leftMargin+x2, p.height-p.topMargin-y2)
+	p.content.lines += fmt.Sprintf("%v %v m\r\n%v %v l\r\n",
+		p.leftMargin+x1,
+		p.height-p.topMargin-y1,
+		p.leftMargin+x2,
+		p.height-p.topMargin-y2)
 }
 
 func (p *PdfPage) setColour(red, green, blue int) {
@@ -403,7 +411,7 @@ func (r PdfResources) bytes() []byte {
 	if len(r.fonts) > 0 {
 		fmt.Fprintf(&buf, "/Font << ")
 		for _, font := range r.fonts {
-			fmt.Fprintf(&buf, "%v %v ", font.name, font.objectRef())
+			fmt.Fprintf(&buf, "/%v %v ", font.name, font.objectRef())
 		}
 		fmt.Fprintf(&buf, ">>\r\n")
 	}
@@ -411,7 +419,7 @@ func (r PdfResources) bytes() []byte {
 	if len(r.images) > 0 {
 		fmt.Fprintf(&buf, "/XObject << ")
 		for _, image := range r.images {
-			fmt.Fprintf(&buf, "%v %v ", image.name, image.objectRef())
+			fmt.Fprintf(&buf, "/%v %v ", image.name, image.objectRef())
 		}
 		fmt.Fprintf(&buf, ">>\r\n")
 	}
@@ -535,7 +543,7 @@ func main() {
 	document.addFont("F2", TimesRoman)
 	document.addFont("F3", Symbol)
 	document.addFont("F4", ZapfDingbats)
-	document.addImage("I1", "gopher.jpg")
+	document.addImage("gopher", "gopher.jpg")
 
 	document.currentPage.setFont("F1")
 	document.currentPage.println("Courier")
@@ -571,7 +579,7 @@ func main() {
 	}
 	document.currentPage.println("")
 
-	document.currentPage.drawImage("I1", 250, 300)
+	document.currentPage.drawImage("gopher", 250, 300)
 
 	document.currentPage.drawLine(200, 320, 500, 320)
 	document.currentPage.drawBox(200, 350, 300, 20)
