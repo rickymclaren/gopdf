@@ -81,6 +81,7 @@ type PdfFont struct {
 	name     string
 	baseFont string
 	subtype  string
+	encoding string
 }
 
 // NewFont creates one of the 14 base fonts
@@ -88,33 +89,33 @@ func NewFont(name string, font int) PdfFont {
 	var result PdfFont
 	switch font {
 	case Courier:
-		result = PdfFont{name: name, baseFont: "Courier", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Courier", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case CourierBold:
-		result = PdfFont{name: name, baseFont: "Courier-Bold", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Courier-Bold", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case CourierBoldOblique:
-		result = PdfFont{name: name, baseFont: "Courier-BoldOblique", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Courier-BoldOblique", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case CourierOblique:
-		result = PdfFont{name: name, baseFont: "Courier-Oblique", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Courier-Oblique", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case Helvetica:
-		result = PdfFont{name: name, baseFont: "Helvetica", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case HelveticaBold:
-		result = PdfFont{name: name, baseFont: "Helvetica-Bold", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica-Bold", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case HelveticaBoldOblique:
-		result = PdfFont{name: name, baseFont: "Helvetica-BoldOblique", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica-BoldOblique", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case HelveticaOblique:
-		result = PdfFont{name: name, baseFont: "Helvetica-Oblique", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Helvetica-Oblique", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case TimesRoman:
-		result = PdfFont{name: name, baseFont: "Times-Roman", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Times-Roman", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case TimesBold:
-		result = PdfFont{name: name, baseFont: "Times-Bold", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Times-Bold", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case TimesBoldItalic:
-		result = PdfFont{name: name, baseFont: "Times-BoldItalic", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Times-BoldItalic", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case TimesItalic:
-		result = PdfFont{name: name, baseFont: "Times-Italic", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Times-Italic", subtype: "Type1", encoding: "WinAnsiEncoding"}
 	case Symbol:
-		result = PdfFont{name: name, baseFont: "Symbol", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "Symbol", subtype: "Type1", encoding: "StandardEncoding"}
 	case ZapfDingbats:
-		result = PdfFont{name: name, baseFont: "ZapfDingbats", subtype: "Type1"}
+		result = PdfFont{name: name, baseFont: "ZapfDingbats", subtype: "Type1", encoding: "StandardEncoding"}
 	default:
 		panic("Invalid font " + string(font))
 	}
@@ -129,6 +130,9 @@ func (f PdfFont) bytes() []byte {
 	fmt.Fprintf(&buf, "/Subtype /%v \r\n", f.subtype)
 	fmt.Fprintf(&buf, "/Name /%v \r\n", f.name)
 	fmt.Fprintf(&buf, "/BaseFont /%v \r\n", f.baseFont)
+	if f.encoding != "StandardEncoding" {
+		fmt.Fprintf(&buf, "/Encoding /%v\r\n", f.encoding)
+	}
 	fmt.Fprintf(&buf, ">>\r\n")
 	fmt.Fprintf(&buf, "endobj\r\n")
 	return buf.Bytes()
@@ -261,9 +265,7 @@ func (p *PdfPage) outputText(text string) {
 			sb.WriteByte(b)
 		}
 	}
-	p.content.text += fmt.Sprintf("1 0 0 1 %v %v Tm\r\n",
-		p.leftMargin+p.x,
-		p.height-p.topMargin-p.y-p.fontSize)
+	p.content.text += fmt.Sprintf("1 0 0 1 %v %v Tm\r\n", p.x, p.y)
 	p.content.text += fmt.Sprintf("(%s) Tj\r\n", sb.String())
 }
 
@@ -274,8 +276,8 @@ func (p *PdfPage) print(text string) {
 
 func (p *PdfPage) println(text string) {
 	p.outputText(text)
-	p.x = 0
-	p.y += p.fontSize
+	p.x = p.leftMargin
+	p.y -= p.fontSize
 }
 
 func (p *PdfPage) drawImage(name string, x, y int) {
@@ -289,26 +291,18 @@ func (p *PdfPage) drawImage(name string, x, y int) {
 	h := i.height
 
 	p.content.graphics += fmt.Sprintf("q\r\n")
-	p.content.graphics += fmt.Sprintf("%v 0 0 %v %v %v cm\r\n", w, h, x, p.height-y)
+	p.content.graphics += fmt.Sprintf("%v 0 0 %v %v %v cm\r\n", w, h, x, y)
 	p.content.graphics += fmt.Sprintf("/%v Do\r\n", name)
 	p.content.graphics += fmt.Sprintf("Q\r\n")
 
 }
 
 func (p *PdfPage) drawBox(x, y, w, h int) {
-	p.content.lines += fmt.Sprintf("%v %v %v %v re\r\n",
-		p.leftMargin+x,
-		p.height-p.topMargin-y,
-		w,
-		-h)
+	p.content.lines += fmt.Sprintf("%v %v %v %v re\r\n", x, y, w, h)
 }
 
 func (p *PdfPage) drawLine(x1, y1, x2, y2 int) {
-	p.content.lines += fmt.Sprintf("%v %v m\r\n%v %v l\r\n",
-		p.leftMargin+x1,
-		p.height-p.topMargin-y1,
-		p.leftMargin+x2,
-		p.height-p.topMargin-y2)
+	p.content.lines += fmt.Sprintf("%v %v m\r\n%v %v l\r\n", x1, y1, x2, y2)
 }
 
 func (p *PdfPage) setColour(red, green, blue int) {
@@ -473,6 +467,8 @@ func (d *PdfDocument) addPage() PdfPage {
 	}
 	p.parent = d.catalog.pdfPages
 	p.document = d
+	p.x = p.leftMargin
+	p.y = p.height - p.topMargin - p.fontSize
 	p.content = new(PdfPageContent)
 	p.content.text = "/F1 10 Tf\r\n1 0 0 1 72 -29 Tm\r\n10 TL\r\n"
 	p.content.graphics = "0.5 w\r\n"
@@ -490,12 +486,12 @@ func (d *PdfDocument) addFont(name string, id int) PdfFont {
 	return font
 }
 
-func (d *PdfDocument) addImage(name string, filename string) {
+func (d *PdfDocument) addImage(name string, filename string) PdfImage {
 	i := PdfImage{name: name}
 	i.loadImage(name, filename)
 	d.addObject(&i)
 	d.resources.images = append(d.resources.images, &i)
-
+	return i
 }
 
 // Bytes returns the byte representation of the PdfDocument
@@ -539,64 +535,69 @@ func main() {
 		charset[i] = byte(i)
 	}
 	document := NewPdfDocument()
-	document.addFont("F1", Courier)
-	document.addFont("F2", TimesRoman)
-	document.addFont("F3", Symbol)
-	document.addFont("F4", ZapfDingbats)
+	page := document.currentPage
+	document.addFont("Courier", Courier)
+	document.addFont("CourierBold", CourierBold)
+	document.addFont("TimesRoman", TimesRoman)
+	document.addFont("TimesBold", TimesBold)
+	document.addFont("Symbol", Symbol)
+	document.addFont("Dingbats", ZapfDingbats)
 	document.addImage("gopher", "gopher.jpg")
 
-	document.currentPage.setFont("F1")
-	document.currentPage.println("Courier")
+	page.setFont("CourierBold")
+	page.println("Courier")
+	page.setFont("Courier")
 	for i := 0; i < len(charset); i += 16 {
 		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
-		document.currentPage.println(s)
+		page.println(s)
 	}
-	document.currentPage.println("")
+	page.println("")
 
-	document.currentPage.setFont("F2")
-	document.currentPage.println("Times Roman")
+	page.setFont("TimesBold")
+	page.println("Times Roman")
+	page.setFont("TimesRoman")
 	for i := 0; i < len(charset); i += 16 {
 		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
-		document.currentPage.println(s)
+		page.println(s)
 	}
-	document.currentPage.println("")
+	page.println("")
 
-	document.currentPage.setFont("F1")
-	document.currentPage.println("Symbol")
-	document.currentPage.setFont("F3")
+	page.setFont("TimesBold")
+	page.println("Symbol")
+	page.setFont("Symbol")
 	for i := 0; i < len(charset); i += 16 {
 		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
-		document.currentPage.println(s)
+		page.println(s)
 	}
-	document.currentPage.println("")
+	page.println("")
 
-	document.currentPage.setFont("F1")
-	document.currentPage.println("Dingbats")
-	document.currentPage.setFont("F4")
+	page.setFont("TimesBold")
+	page.println("Dingbats")
+	page.setFont("Dingbats")
 	for i := 0; i < len(charset); i += 16 {
 		s := fmt.Sprintf("%2X %s\r\n", i, string(charset[i:i+16]))
-		document.currentPage.println(s)
+		page.println(s)
 	}
-	document.currentPage.println("")
+	page.println("")
 
-	document.currentPage.drawImage("gopher", 250, 300)
+	page.drawImage("gopher", 250, 550)
+	page.drawBox(250, 500, 300, 20)
+	page.drawLine(250, 480, 550, 480)
 
-	document.currentPage.drawLine(200, 320, 500, 320)
-	document.currentPage.drawBox(200, 350, 300, 20)
-
-	document.currentPage.setFont("F1")
-	document.currentPage.setColour(255, 0, 0)
-	document.currentPage.x = 200
-	document.currentPage.y = 400
-	document.currentPage.print("red")
-	document.currentPage.setColour(0, 255, 0)
-	document.currentPage.x = 200
-	document.currentPage.y = 420
-	document.currentPage.print("green")
-	document.currentPage.setColour(0, 0, 255)
-	document.currentPage.x = 200
-	document.currentPage.y = 440
-	document.currentPage.print("blue")
+	page.setFont("TimesBold")
+	page.setFontSize(18)
+	page.setColour(255, 0, 0)
+	page.x = 300
+	page.y = 440
+	page.print("Red")
+	page.setColour(0, 255, 0)
+	page.x = 300
+	page.y = 420
+	page.print("Green")
+	page.setColour(0, 0, 255)
+	page.x = 300
+	page.y = 400
+	page.print("Blue")
 
 	fmt.Printf("%v\n", string(document.Bytes()))
 }
